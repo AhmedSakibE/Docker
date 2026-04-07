@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  backend:
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+
+  frontend:
+    ports:
+      - "8080:80"
