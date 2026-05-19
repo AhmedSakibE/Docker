@@ -1,0 +1,4 @@
+services:
+  backend:
+    environment:
+      ENABLE_NAME_FIELD: "true"

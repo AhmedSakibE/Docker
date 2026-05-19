@@ -1,0 +1,4 @@
+services:
+  backend:
+    environment:
+      ENABLE_ADDRESS_FIELD: "true"

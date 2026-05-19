@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Docker Compose Override Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 760px;
+      margin: 56px auto;
+      line-height: 1.5;
+      color: #222;
+    }
+
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 18px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    }
+
+    .field-card {
+      background: #fafafa;
+    }
+
+    input, button {
+      padding: 10px;
+      font-size: 16px;
+      margin-top: 8px;
+    }
+
+    input {
+      width: min(420px, 100%);
+      box-sizing: border-box;
+    }
+
+    button {
+      cursor: pointer;
+      margin-left: 6px;
+    }
+
+    code {
+      background: #f2f2f2;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .muted {
+      color: #666;
+    }
+
+    .status {
+      margin-top: 10px;
+      color: #0a5c0a;
+    }
+
+    .error {
+      color: #a00000;
+    }
+
+    ul {
+      padding-left: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Docker Compose Environment Demo</h1>
+    <p id="owner">Loading owner from environment...</p>
+    <p id="modeDescription" class="muted"></p>
+  </div>
+
+  <div id="fields"></div>
+
+  <div class="card">
+    <h2>Volume logs</h2>
+    <p class="muted">When you update name or address, the backend writes to files inside <code>/app/data</code>. In normal mode this is stored in the Docker named volume.</p>
+    <button onclick="loadLogs()">Refresh logs</button>
+    <div id="logs"></div>
+  </div>
+
+  <script>
+    async function fetchJson(url, options) {
+      const res = await fetch(url, options);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Request failed');
+      }
+
+      return data;
+    }
+
+    async function loadConfig() {
+      try {
+        const config = await fetchJson('/api/config');
+        const owner = document.getElementById('owner');
+        const modeDescription = document.getElementById('modeDescription');
+        const fields = document.getElementById('fields');
+
+        owner.innerHTML = `Base compose value: <code>${config.owner.envVariableName}=${config.owner.value}</code>`;
+
+        if (config.fields.length === 0) {
+          modeDescription.innerHTML = 'No feature override file is active. Add <code>compose.name.yaml</code>, <code>compose.address.yaml</code>, or both.';
+          fields.innerHTML = '';
+          await loadLogs();
+          return;
+        }
+
+        const enabledNames = config.fields.map((field) => field.label).join(' + ');
+        modeDescription.innerHTML = `Active input fields: <strong>${enabledNames}</strong>`;
+
+        fields.innerHTML = config.fields.map((field) => `
+          <div class="card field-card">
+            <h2>${field.label}: <span id="${field.key}-value">${field.value}</span></h2>
+            <input id="${field.key}-input" type="text" placeholder="${field.placeholder}" />
+            <button onclick="updateField('${field.key}', '${field.apiPath}')">Update ${field.label}</button>
+            <div id="${field.key}-status" class="status"></div>
+          </div>
+        `).join('');
+
+        await loadLogs();
+      } catch (err) {
+        document.getElementById('owner').innerText = 'Backend not reachable';
+        document.getElementById('modeDescription').innerText = 'Start the Docker Compose stack from the README commands.';
+        document.getElementById('modeDescription').classList.add('error');
+        console.error(err);
+      }
+    }
+
+    async function updateField(key, apiPath) {
+      const input = document.getElementById(`${key}-input`);
+      const status = document.getElementById(`${key}-status`);
+      const value = input.value.trim();
+
+      if (!value) {
+        status.innerText = `Please enter a ${key}.`;
+        status.classList.add('error');
+        return;
+      }
+
+      try {
+        const body = {};
+        body[key] = value;
+
+        const data = await fetchJson(apiPath, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        document.getElementById(`${key}-value`).innerText = data[key];
+        input.value = '';
+        status.innerText = `${key} updated successfully.`;
+        status.classList.remove('error');
+        await loadLogs();
+      } catch (err) {
+        status.innerText = err.message;
+        status.classList.add('error');
+      }
+    }
+
+    async function loadLogs() {
+      try {
+        const logs = await fetchJson('/api/logs');
+        const logsElement = document.getElementById('logs');
+        const nameList = logs.nameChanges.length
+          ? logs.nameChanges.map((line) => `<li>${line}</li>`).join('')
+          : '<li>No name changes yet.</li>';
+        const addressList = logs.addressChanges.length
+          ? logs.addressChanges.map((line) => `<li>${line}</li>`).join('')
+          : '<li>No address changes yet.</li>';
+
+        logsElement.innerHTML = `
+          <h3>Name changes</h3>
+          <ul>${nameList}</ul>
+          <h3>Address changes</h3>
+          <ul>${addressList}</ul>
+        `;
+      } catch (err) {
+        document.getElementById('logs').innerHTML = `<p class="error">Could not load logs: ${err.message}</p>`;
+      }
+    }
+
+    loadConfig();
+  </script>
+</body>
+</html>
